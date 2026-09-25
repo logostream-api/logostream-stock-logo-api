@@ -208,6 +208,19 @@ Every successful request returns image bytes with the matching `Content-Type`.
 |---|---|
 | `X-Source` | Which layer served the image: `edge`, `R2`, `TwicPics` or `fallback` |
 | `X-Fallback` | `1` when a placeholder was returned instead of a real logo |
+| `X-Fallback-Reason` | Why the placeholder came: `unknown` (we do not have that identifier) or `ambiguous` (the identifier means different things on different exchanges — add `mic`). Present only on placeholders |
+
+**`ambiguous` is worth watching in your logs.** It means the lookup very nearly
+worked: we know the symbol, we just do not know which of two commodities you
+meant. One `mic` parameter turns it into a logo.
+
+```bash
+curl -sI "https://api.logostream.dev/commodities/SF?key=KEY" | grep -i x-fallback-reason
+# X-Fallback-Reason: ambiguous
+
+curl -sI "https://api.logostream.dev/commodities/SF?mic=ZCE&key=KEY" | grep -i x-source
+# X-Source: R2
+```
 
 ### How to tell a real logo from a placeholder
 
@@ -225,6 +238,10 @@ curl -o /dev/null -w "%{http_code}\n" \
 # 2. Inspect the X-Fallback header
 curl -sI "https://api.logostream.dev/stocks/isin/US0378331005?key=KEY" | grep -i x-fallback
 ```
+
+If you are logging placeholders, log `X-Fallback-Reason` alongside them. It
+separates "we do not have this" from "you are one parameter away", and the two
+call for very different follow-up.
 
 ### Status codes
 
