@@ -2,8 +2,8 @@
 
 **[logostream](https://logostream.dev)** is a REST API that returns a company logo
 for a financial identifier. Look up **380,000+ logos** by **ISIN**, **WKN**, **ticker
-symbol**, **BIC/SWIFT**, crypto symbol, country code or currency code — SVG on every
-plan, raster on demand.
+symbol**, **BIC/SWIFT**, crypto symbol, commodity or futures contract, country code
+or currency code — SVG on every plan, raster on demand.
 
 Built for fintech: brokerage apps, portfolio trackers, trading platforms, banking
 dashboards and research tools.
@@ -93,6 +93,70 @@ GET /cryptos/{symbol}
 curl "https://api.logostream.dev/cryptos/BTC?key=KEY"
 ```
 
+### Commodity logos — by name, symbol or futures contract
+
+```
+GET /commodities/{identifier}
+```
+
+Accepts four kinds of identifier, resolved in that order: the canonical slug, a
+CFD symbol as brokers display it, a futures root, and any contract form built
+from that root.
+
+```bash
+# Canonical name
+curl "https://api.logostream.dev/commodities/gold?key=KEY"
+
+# CFD symbol
+curl "https://api.logostream.dev/commodities/SOYBEAN?key=KEY"
+
+# Futures root
+curl "https://api.logostream.dev/commodities/BGI?key=KEY"
+
+# Contract forms — all resolve to the same root
+curl "https://api.logostream.dev/commodities/BGIV26?key=KEY"   # Oct 2026
+curl "https://api.logostream.dev/commodities/BGI1%21?key=KEY"  # continuation
+```
+
+Contract forms are resolved structurally, not from a lookup table, so new
+delivery months work the day they list. `BGIV26`, `BGIV2026`, `BGI1!`, `BGIc1`
+and `BGI=F` all resolve to `BGI`.
+
+#### Ambiguous roots — the `mic` parameter
+
+Eighteen root symbols mean different commodities on different exchanges. Add
+`mic` to say which exchange you mean:
+
+```bash
+curl "https://api.logostream.dev/commodities/ZS?mic=CBOT&key=KEY"   # soybeans
+curl "https://api.logostream.dev/commodities/ZS?mic=LME&key=KEY"    # zinc
+```
+
+Without `mic`, those eighteen roots split into two groups:
+
+**Thirteen return the placeholder** rather than guess — `BR`, `CB`, `CJ`, `CU`,
+`CY`, `EN`, `GF`, `HC`, `MA`, `RT`, `SA`, `SF`, `SR`. A wrong logo is worse
+than no logo.
+
+```bash
+curl "https://api.logostream.dev/commodities/BR?key=KEY"            # placeholder
+curl "https://api.logostream.dev/commodities/BR?mic=RUS&key=KEY"    # Brent crude
+curl "https://api.logostream.dev/commodities/BR?mic=SHFE&key=KEY"   # butadiene rubber
+```
+
+**Five have a curated default** — the contract the symbol is commonly
+understood to mean — and `mic` overrides it: `PL` (platinum), `RB` (gasoline),
+`SI` (silver), `ZC` (corn), `ZS` (soybeans).
+
+```bash
+curl "https://api.logostream.dev/commodities/SI?key=KEY"            # silver (COMEX)
+curl "https://api.logostream.dev/commodities/SI?mic=LME&key=KEY"    # steel
+```
+
+`mic` takes the exchange code as TradingView spells it (`LME`, `CBOT`, `NYMEX`,
+`ZCE`, `SHFE`), not an ISO 10383 MIC. An unknown exchange returns the
+placeholder; it does not fall back to the bare lookup.
+
 ### Country flags
 
 ```
@@ -122,9 +186,10 @@ curl "https://api.logostream.dev/forex/EUR?key=KEY"
 |---|---|---|---|---|
 | `format` | `svg`, `png`, `webp`, `jpg`, `jpeg`, `avif` | `svg` | all | Output format |
 | `size` | e.g. `64`, `256`, `512` | native | raster formats | Pixel size; ignored for SVG |
-| `variant` | `xs`, `logo`, `transparent` | icon | all | Icon variants and full wordmark |
+| `variant` | `xs`, `logo`, `transparent` | icon | all; commodities: `transparent` only | Icon variants and full wordmark |
 | `mode` | `light`, `dark`, `white`, `black` | — | banks | Light/dark-optimised bank marks |
 | `aspect` | e.g. `1x1`, `4x3` | `1x1` | country | Flag aspect ratio |
+| `mic` | e.g. `LME`, `CBOT`, `NYMEX` | — | commodities | Disambiguate a root that means different commodities on different exchanges |
 | `fallback` | `none` | — | all | Return `404` instead of a placeholder |
 | `force` | `true` | — | all | Bypass caches (slower, use sparingly) |
 
@@ -247,6 +312,7 @@ done < isins.txt
 | Stocks | 380,000+ logos, by ISIN, WKN and ticker |
 | Banks | By BIC/SWIFT and German BLZ, light and dark variants |
 | Crypto | Major coins and tokens by symbol |
+| Commodities | 90 raw materials — metals, energy, agriculture, chemicals — by name, CFD symbol or futures contract |
 | Countries | Flags in multiple aspect ratios |
 | Forex | Currency marks by ISO currency code |
 
@@ -272,6 +338,18 @@ generated on request via `?format=`.
 **What happens when a logo does not exist?**
 You get HTTP 200 with an initials placeholder. Add `?fallback=none` to get a 404
 instead, or read the `X-Fallback` response header.
+
+**Can I look up a futures contract directly?**
+Yes. `GET /commodities/BGIV26` resolves the contract to its root and returns the
+commodity logo. The same holds for `BGI1!`, `BGIc1`, `BGI=F` and `BGIV2026` — the
+rule is structural, so future delivery months need no update on our side.
+
+**Why does a commodity root sometimes return the placeholder?**
+Because it is ambiguous across exchanges. `BR` is Brent at MOEX and butadiene
+rubber at Shanghai — rather than guess, the API returns the placeholder and lets
+you disambiguate with `?mic=RUS`. A wrong logo is worse than no logo. Five
+well-known roots (`PL`, `RB`, `SI`, `ZC`, `ZS`) are the exception: they keep the
+contract the symbol is commonly understood to mean, and `mic` overrides that.
 
 **Is there a free tier?**
 Yes — see [logostream.dev/pricing](https://logostream.dev/pricing).
